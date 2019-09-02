@@ -5,3 +5,4 @@ authors = ["Elliot Courant <me@elliotcourant.dev>"]
 edition = "2018"
 
 [dependencies]
+byteorder = "1.3.2"
