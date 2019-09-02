@@ -1,36 +1,19 @@
 use sqlparser::dialect::*;
-use sqlparser::ast::*;
 use sqlparser::parser::*;
 use sqlparser::tokenizer::*;
-use crate::tree::create::{
-    CreateTable,
-    TableDefs,
-    TableDef,
-    ColumnTableDef,
-    Nullable,
-    DefaultExpr,
-    Nullability,
-    ForeignKeyConstraintTableDef,
-    ConstraintTableDef,
-};
+use crate::tree::create::{CreateTable, TableDefs, TableDef, ColumnTableDef, Nullable, DefaultExpr, Nullability, ForeignKeyConstraintTableDef, UniqueConstraintTableDef, ConstraintTableDef, IndexTableDef, IndexElem, IndexElemList};
 use crate::tree::table_name::TableName;
-use sqlparser::tokenizer::Whitespace::Tab;
 use crate::types::{T, Types};
 use crate::types::internal::{InternalType, Family};
 use crate::types::oid::Oid;
 use std::borrow::Borrow;
+use crate::tree::name::Name;
+use sqlparser::parser::IsOptional::Mandatory;
 
 macro_rules! parser_err {
     ($MSG:expr) => {
         Err(ParserError::ParserError($MSG.to_string()))
     };
-}
-
-#[derive(Debug, Clone)]
-pub enum FileType {
-    NdJson,
-    Parquet,
-    CSV,
 }
 
 #[derive(Debug, Clone)]
@@ -121,6 +104,24 @@ impl SqlParser {
             return Ok(columns);
         }
 
+        loop {
+            if let Some(constraint) = self.parse_optional_table_constraint(table_name.clone())? {
+                columns.push(TableDef::ConstraintTableDef(constraint))
+            } else if let Some(Token::Word(column_name)) = self.parser.peek_token() {
+                self.parser.next_token();
+            } else {
+                return self.expected("column name or constraint definition", self.parser.peek_token());
+            }
+
+            let comma = self.parser.consume_token(&Token::Comma);
+            if self.parser.consume_token(&Token::RParen) {
+                // allow a trailing comma, even though it's not in standard
+                break;
+            } else if !comma {
+                return self.expected("',' or ')' after column definition", self.parser.peek_token());
+            }
+        }
+
         columns.push(TableDef::ColumnTableDef {
             0: ColumnTableDef {
                 name: "".to_string(),
@@ -151,7 +152,7 @@ impl SqlParser {
         Ok(columns)
     }
 
-    pub fn parse_optional_table_constraint(&mut self, table: TableName) -> Result<Option<ConstraintTableDef>, ParserError> {
+    pub fn parse_optional_table_constraint(&mut self, table_name: TableName) -> Result<Option<ConstraintTableDef>, ParserError> {
         let name = if self.parser.parse_keyword("CONSTRAINT") {
             Some(self.parser.parse_identifier())
         } else {
@@ -164,7 +165,17 @@ impl SqlParser {
                 if is_primary {
                     self.parser.expect_keyword("KEY")?;
                 }
-                Ok(None)
+                let columns = self.parser.parse_parenthesized_column_list(Mandatory);
+                Ok(Some(ConstraintTableDef::UniqueConstraintTableDef{
+                    0: UniqueConstraintTableDef {
+                        primary_key: is_primary,
+                        index: IndexTableDef {
+                            name: "".to_string(),
+                            columns: vec![],
+                            storing: vec![]
+                        }
+                    }
+                }))
             }
             unexpected => {
                 if name.is_some() {
@@ -176,6 +187,11 @@ impl SqlParser {
             }
         }
     }
+
+    pub fn parse_parenthesized_column_list(&mut self) -> Result<IndexElemList, ParserError> {
+        return parser_err!("not implemented")
+    }
+
 
     /// Report unexpected token
     fn expected<T>(&self, expected: &str, found: Option<Token>) -> Result<T, ParserError> {
@@ -202,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_thing() {
-        let sql = "create table \"public\".\"test\" (id primary key);";
+        let sql = "create table \"public\".\"test\" (id int primary key);";
         let result = SqlParser::parse_sql(String::from(sql));
         assert!(!result.is_err());
         let stmt = result.unwrap();

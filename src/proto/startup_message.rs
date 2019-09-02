@@ -12,12 +12,12 @@ pub struct StartupMessage {
 impl StartupMessage {
     pub fn encode(&self) -> Vec<u8> {
         let mut result = vec![0; 0];
-        result.write_u32::<BigEndian>(self.protocol_version);
-        result.write_u32::<BigEndian>(self.parameters.len() as u32);
+        let _ = result.write_u32::<BigEndian>(self.protocol_version);
+        let _ = result.write_u32::<BigEndian>(self.parameters.len() as u32);
         for param in self.parameters.as_slice() {
             let param_encoded = param.encode();
-            result.write_u32::<BigEndian>(param_encoded.len() as u32);
-            result.write(param_encoded.borrow());
+            let _ = result.write_u32::<BigEndian>(param_encoded.len() as u32);
+            let _ = result.write(param_encoded.borrow());
         }
         return result.to_vec();
     }
@@ -31,10 +31,10 @@ pub struct Parameter {
 impl Parameter {
     pub fn encode(&self) -> Vec<u8> {
         let mut result = vec![0; 0];
-        result.write_u32::<BigEndian>(self.key.len() as u32).unwrap();
-        result.write(self.key.as_ref());
-        result.write_u32::<BigEndian>(self.val.len() as u32).unwrap();
-        result.write(self.val.as_ref());
+        let _ = result.write_u32::<BigEndian>(self.key.len() as u32).unwrap();
+        let _ = result.write(self.key.as_ref());
+        let _ = result.write_u32::<BigEndian>(self.val.len() as u32).unwrap();
+        let _ = result.write(self.val.as_ref());
         return result.to_vec();
     }
 

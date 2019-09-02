@@ -1,15 +1,15 @@
-#[macro_use]
-extern crate lazy_static;
-
-use std::borrow::Borrow;
 use rocksdb::{DB, Options};
+use std::env;
 
 mod proto;
 mod tree;
 mod types;
 mod parser;
+mod cmd;
 
 fn main() {
+    let args = cmd::Args::new(env::args().collect());
+
     let startup: proto::startup_message::StartupMessage;
     let create: tree::create::CreateDatabase;
     let typ: types::T;
