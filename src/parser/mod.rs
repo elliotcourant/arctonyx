@@ -22,6 +22,7 @@ use sqlparser::sqlast::*;
 use sqlparser::sqlparser::*;
 use sqlparser::sqltokenizer::*;
 use crate::tree::create::CreateTable;
+use crate::tree::table_name::TableName;
 
 macro_rules! parser_err {
     ($MSG:expr) => {
@@ -92,18 +93,30 @@ impl SqlParser {
         if self.parser.parse_keyword("CREATE") {
             self.parse_create()
         } else {
-            return parser_err!("invalid query")
+            return parser_err!("invalid query");
         }
     }
 
     fn parse_create(&mut self) -> Result<Node, ParserError> {
         if self.parser.parse_keyword("TABLE") {
-            return parser_err!("could not create table")
+            self.parse_create_table()
         } else if self.parser.parse_keyword("DATABASE") {
-            return parser_err!("could not create database")
+            return parser_err!("could not create database");
         } else {
-            return parser_err!("could not create object")
+            return parser_err!("could not create object");
         }
+    }
+
+    fn parse_create_table(&mut self) -> Result<Node, ParserError> {
+        let if_not_exists = self.parser.parse_keywords(vec!["IF", "NOT", "EXISTS"]);
+        let table_name = self.parser.parse_tablename();
+        Ok(Node::CreateTable {
+            0: CreateTable {
+                if_not_exists,
+                table: TableName::new(table_name.unwrap()),
+                defs: vec![],
+            }
+        })
     }
 
     pub fn parse_infix(
@@ -116,15 +129,21 @@ impl SqlParser {
 }
 
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_thing() {
-        let result = SqlParser::parse_sql(String::from("create table"));
+        let result = SqlParser::parse_sql(String::from("create table test"));
         assert!(!result.is_err());
+        let stmt = result.unwrap();
+        match stmt {
+            Node::CreateTable(v) => {
+                println!("create table")
+            }
+            _ => {}
+        }
         println!("test");
     }
 }
