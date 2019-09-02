@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub enum Oid {
     Bool = 16,
     Bytea = 17,

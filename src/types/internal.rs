@@ -1,6 +1,7 @@
 use super::T;
 use super::oid::Oid;
 
+#[derive(Debug, Clone)]
 pub enum Family {
     Bool,
     Int,
@@ -24,6 +25,7 @@ pub enum Family {
     Any,
 }
 
+#[derive(Debug, Clone)]
 pub struct InternalType {
     pub family: Family,
     pub width: i32,

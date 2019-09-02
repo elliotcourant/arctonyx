@@ -1,3 +1,4 @@
-pub trait Expr {
+#[derive(Debug, Clone)]
+pub enum Expr {
 
 }
