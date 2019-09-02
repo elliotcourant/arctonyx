@@ -1,28 +1,24 @@
-// Copyright 2018 Grove Enterprises LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-//! SQL Parser
-//!
-//! Note that most SQL parsing is now delegated to the sqlparser crate, which handles ANSI SQL but
-//! this module contains DataFusion-specific SQL extensions.
-
 use sqlparser::dialect::*;
 use sqlparser::ast::*;
 use sqlparser::parser::*;
 use sqlparser::tokenizer::*;
-use crate::tree::create::CreateTable;
+use crate::tree::create::{
+    CreateTable,
+    TableDefs,
+    TableDef,
+    ColumnTableDef,
+    Nullable,
+    DefaultExpr,
+    Nullability,
+    ForeignKeyConstraintTableDef,
+    ConstraintTableDef,
+};
 use crate::tree::table_name::TableName;
+use sqlparser::tokenizer::Whitespace::Tab;
+use crate::types::{T, Types};
+use crate::types::internal::{InternalType, Family};
+use crate::types::oid::Oid;
+use std::borrow::Borrow;
 
 macro_rules! parser_err {
     ($MSG:expr) => {
@@ -51,7 +47,7 @@ pub struct SqlParser {
 impl SqlParser {
     /// Parse the specified tokens
     pub fn new(sql: String) -> Result<Self, ParserError> {
-        let dialect =  PostgreSqlDialect{};
+        let dialect = PostgreSqlDialect {};
         let mut tokenizer = Tokenizer::new(&dialect, &sql);
         let tokens = tokenizer.tokenize()?;
         Ok(SqlParser {
@@ -108,14 +104,86 @@ impl SqlParser {
     fn parse_create_table(&mut self) -> Result<Node, ParserError> {
         let if_not_exists = self.parser.parse_keywords(vec!["IF", "NOT", "EXISTS"]);
         let table_name = self.parser.parse_object_name().unwrap();
-        let items = table_name.0.to_vec();
+        let table = TableName::new(table_name.to_string());
+        let columns = self.parse_create_table_columns(table.clone());
         Ok(Node::CreateTable {
             0: CreateTable {
                 if_not_exists,
-                table: TableName::new(table_name.to_string()),
-                defs: vec![],
+                table,
+                defs: columns.unwrap(),
             }
         })
+    }
+
+    fn parse_create_table_columns(&mut self, table_name: TableName) -> Result<TableDefs, ParserError> {
+        let mut columns = vec![];
+        if !self.parser.consume_token(&Token::LParen) || self.parser.consume_token(&Token::RParen) {
+            return Ok(columns);
+        }
+
+        columns.push(TableDef::ColumnTableDef {
+            0: ColumnTableDef {
+                name: "".to_string(),
+                typ: Types::Unknown.t(),
+                is_serial: false,
+                nullable: Nullable {
+                    nullability: Nullability::NotNull,
+                    constraint_name: "".to_string(),
+                },
+                primary_key: false,
+                unique: false,
+                unique_constraint_name: "".to_string(),
+                default_expr: None,
+            }
+        });
+
+        columns.push(TableDef::ConstraintTableDef {
+            0: ConstraintTableDef::ForeignKeyConstraintTableDef {
+                0: ForeignKeyConstraintTableDef {
+                    name: "".to_string(),
+                    table: table_name,
+                    from_cols: vec![],
+                    to_cols: vec![],
+                },
+            }
+        });
+
+        Ok(columns)
+    }
+
+    pub fn parse_optional_table_constraint(&mut self, table: TableName) -> Result<Option<ConstraintTableDef>, ParserError> {
+        let name = if self.parser.parse_keyword("CONSTRAINT") {
+            Some(self.parser.parse_identifier())
+        } else {
+            None
+        };
+
+        match self.parser.next_token() {
+            Some(Token::Word(ref k)) if k.keyword == "PRIMARY".to_string() || k.keyword == "UNIQUE".to_string() => {
+                let is_primary = k.keyword == "PRIMARY".to_string();
+                if is_primary {
+                    self.parser.expect_keyword("KEY")?;
+                }
+                Ok(None)
+            }
+            unexpected => {
+                if name.is_some() {
+                    self.expected("PRIMARY, UNIQUE, FOREIGN, or CHECK", unexpected)
+                } else {
+                    self.parser.prev_token();
+                    Ok(None)
+                }
+            }
+        }
+    }
+
+    /// Report unexpected token
+    fn expected<T>(&self, expected: &str, found: Option<Token>) -> Result<T, ParserError> {
+        parser_err!(format!(
+            "Expected {}, found: {}",
+            expected,
+            found.map_or_else(|| "EOF".to_string(), |t| format!("{}", t))
+        ))
     }
 
     pub fn parse_infix(
@@ -140,6 +208,26 @@ mod tests {
         let stmt = result.unwrap();
         match stmt {
             Node::CreateTable(v) => {
+                for item in v.defs {
+                    match item {
+                        TableDef::ColumnTableDef(c) => {
+                            println!("found column {}", c.name)
+                        }
+                        TableDef::ConstraintTableDef(c) => {
+                            match c {
+                                ConstraintTableDef::ForeignKeyConstraintTableDef(x) => {
+                                    println!("found foreign key constraint")
+                                }
+                                ConstraintTableDef::UniqueConstraintTableDef(x) => {
+                                    println!("found unique constraint")
+                                }
+                                ConstraintTableDef::CheckConstraintTableDef(x) => {
+                                    println!("found check constraint")
+                                }
+                            }
+                        }
+                    }
+                }
                 println!("create table")
             }
             _ => {}
