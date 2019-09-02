@@ -18,9 +18,9 @@
 //! this module contains DataFusion-specific SQL extensions.
 
 use sqlparser::dialect::*;
-use sqlparser::sqlast::*;
-use sqlparser::sqlparser::*;
-use sqlparser::sqltokenizer::*;
+use sqlparser::ast::*;
+use sqlparser::parser::*;
+use sqlparser::tokenizer::*;
 use crate::tree::create::CreateTable;
 use crate::tree::table_name::TableName;
 
@@ -39,8 +39,6 @@ pub enum FileType {
 
 #[derive(Debug, Clone)]
 pub enum Node {
-    /// ANSI SQL AST node
-    ANSI(ASTNode),
     /// DDL for creating an external table in DataFusion
     CreateTable(CreateTable),
 }
@@ -53,7 +51,7 @@ pub struct SqlParser {
 impl SqlParser {
     /// Parse the specified tokens
     pub fn new(sql: String) -> Result<Self, ParserError> {
-        let dialect = GenericSqlDialect {};
+        let dialect =  PostgreSqlDialect{};
         let mut tokenizer = Tokenizer::new(&dialect, &sql);
         let tokens = tokenizer.tokenize()?;
         Ok(SqlParser {
@@ -109,11 +107,12 @@ impl SqlParser {
 
     fn parse_create_table(&mut self) -> Result<Node, ParserError> {
         let if_not_exists = self.parser.parse_keywords(vec!["IF", "NOT", "EXISTS"]);
-        let table_name = self.parser.parse_tablename();
+        let table_name = self.parser.parse_object_name().unwrap();
+        let items = table_name.0.to_vec();
         Ok(Node::CreateTable {
             0: CreateTable {
                 if_not_exists,
-                table: TableName::new(table_name.unwrap()),
+                table: TableName::new(table_name.to_string()),
                 defs: vec![],
             }
         })
@@ -135,7 +134,8 @@ mod tests {
 
     #[test]
     fn test_thing() {
-        let result = SqlParser::parse_sql(String::from("create table test"));
+        let sql = "create table \"public\".\"test\" (id primary key);";
+        let result = SqlParser::parse_sql(String::from(sql));
         assert!(!result.is_err());
         let stmt = result.unwrap();
         match stmt {
@@ -144,6 +144,6 @@ mod tests {
             }
             _ => {}
         }
-        println!("test");
+        println!("{}", sql.to_string());
     }
 }

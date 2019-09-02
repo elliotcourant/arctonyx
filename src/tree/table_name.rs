@@ -16,7 +16,7 @@ impl TableName {
                 explicit_catalog: false,
                 explicit_schema: false,
             },
-        };
+        }
     }
 }
 
