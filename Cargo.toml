@@ -1,0 +1,7 @@
+[package]
+name = "arctonyx"
+version = "0.1.0"
+authors = ["Elliot Courant <me@elliotcourant.dev>"]
+edition = "2018"
+
+[dependencies]
