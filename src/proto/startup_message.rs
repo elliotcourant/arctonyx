@@ -52,7 +52,6 @@ impl Parameter {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,7 +82,7 @@ mod tests {
 
     #[test]
     fn test_parameter_encode_decode() {
-        let param = Parameter { key: String::from("user"), val: String::from("postgres") };
+        let param = Parameter { key: "user".to_string(), val: "postgres".to_string() };
         let result = param.encode();
         let mut decoded = Parameter { key: "".to_string(), val: "".to_string() };
         decoded.decode(result);
