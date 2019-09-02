@@ -1,11 +1,26 @@
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 use std::io::{Write, Cursor, Read};
+use std::borrow::Borrow;
 
 pub type ProtocolVersion = u32;
 
 pub struct StartupMessage {
     protocol_version: ProtocolVersion,
     parameters: Vec<Parameter>,
+}
+
+impl StartupMessage {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut result = vec![0; 0];
+        result.write_u32::<BigEndian>(self.protocol_version);
+        result.write_u32::<BigEndian>(self.parameters.len() as u32);
+        for param in self.parameters.as_slice() {
+            let param_encoded = param.encode();
+            result.write_u32::<BigEndian>(param_encoded.len() as u32);
+            result.write(param_encoded.borrow());
+        }
+        return result.to_vec();
+    }
 }
 
 pub struct Parameter {
@@ -48,10 +63,29 @@ mod tests {
     }
 
     #[test]
-    fn test_parameter_encode() {
+    fn test_startup_message_encode_decode() {
+        let startup = StartupMessage {
+            protocol_version: 123456,
+            parameters: vec![
+                Parameter {
+                    key: "user".to_string(),
+                    val: "postgres".to_string(),
+                },
+                Parameter {
+                    key: "database".to_string(),
+                    val: "my_db".to_string(),
+                }
+            ],
+        };
+        let encoded = startup.encode();
+        assert!(encoded.len() > 0);
+    }
+
+    #[test]
+    fn test_parameter_encode_decode() {
         let param = Parameter { key: String::from("user"), val: String::from("postgres") };
         let result = param.encode();
-        let mut decoded = Parameter{ key: "".to_string(), val: "".to_string() };
+        let mut decoded = Parameter { key: "".to_string(), val: "".to_string() };
         decoded.decode(result);
         assert_eq!(decoded.key, param.key);
         assert_eq!(decoded.val, param.val);
