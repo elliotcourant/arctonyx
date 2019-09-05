@@ -158,39 +158,50 @@ impl SqlParser {
     }
 
     pub fn parse_optional_table_constraint(&mut self, table_name: TableName) -> Result<Option<ConstraintTableDef>, ParserError> {
-        let name = if self.parser.parse_keyword("CONSTRAINT") {
-            Some(self.parser.parse_identifier())
-        } else {
-            None
-        };
-
-        match self.parser.next_token() {
-            Some(Token::Word(ref k)) if k.keyword == "PRIMARY".to_string() || k.keyword == "UNIQUE".to_string() => {
-                let is_primary = k.keyword == "PRIMARY".to_string();
-                if is_primary {
-                    self.parser.expect_keyword("KEY")?;
-                }
-                let columns = self.parser.parse_parenthesized_column_list(Mandatory);
-                Ok(Some(ConstraintTableDef::UniqueConstraintTableDef {
-                    0: UniqueConstraintTableDef {
-                        primary_key: is_primary,
-                        index: IndexTableDef {
-                            name: "".to_string(),
-                            columns: vec![],
-                            storing: vec![],
-                        },
-                    }
-                }))
-            }
-            unexpected => {
-                if name.is_some() {
-                    self.expected("PRIMARY, UNIQUE, FOREIGN, or CHECK", unexpected)
-                } else {
-                    self.parser.prev_token();
-                    Ok(None)
-                }
-            }
+        if !self.parse_keyword("CONSTRAINT") {
+            return Ok(None)
         }
+        let name = self.parser.parse_identifier();
+
+        if self.parse_keyword("CHECK") {
+            return parser_err!("not implemented");
+        } else if self.parse_keyword("UNIQUE") {
+
+        } else if self.parse_keywords(vec!["PRIMARY", "KEY"]) {
+
+        } else if self.parse_keywords(vec!["FOREIGN", "KEY"]) {
+
+        } else {
+            return self.expected("constraint", self.parser.peek_token())
+        }
+        return parser_err!("not implemented");
+//        match self.parser.next_token() {
+//            Some(Token::Word(ref k)) if k.keyword == "PRIMARY".to_string() || k.keyword == "UNIQUE".to_string() => {
+//                let is_primary = k.keyword == "PRIMARY".to_string();
+//                if is_primary {
+//                    self.parser.expect_keyword("KEY")?;
+//                }
+//                let columns = self.parser.parse_parenthesized_column_list(Mandatory);
+//                Ok(Some(ConstraintTableDef::UniqueConstraintTableDef {
+//                    0: UniqueConstraintTableDef {
+//                        primary_key: is_primary,
+//                        index: IndexTableDef {
+//                            name: "".to_string(),
+//                            columns: vec![],
+//                            storing: vec![],
+//                        },
+//                    }
+//                }))
+//            }
+//            unexpected => {
+//                if name.is_some() {
+//                    self.expected("PRIMARY, UNIQUE, FOREIGN, or CHECK", unexpected)
+//                } else {
+//                    self.parser.prev_token();
+//                    Ok(None)
+//                }
+//            }
+//        }
     }
 }
 
@@ -225,5 +236,10 @@ mod tests {
     #[test]
     fn test_create_table_fk() {
         does_parse( "create table users (user_id int primary key, account_id int references accounts (account_id));");
+    }
+
+    #[test]
+    fn test_create_table_fk_constraint() {
+        does_parse( "create table products (product_id int primary key, account_id int, constraint fk_test foreign key (account_id) references accounts (account_id));");
     }
 }

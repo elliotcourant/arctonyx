@@ -152,6 +152,12 @@ impl SqlParser {
         ))
     }
 
+    /// Look for an expected keyword and consume it if it exists
+    #[must_use]
+    pub fn parse_keyword(&mut self, expected: &'static str) -> bool {
+        return self.parser.parse_keyword(expected);
+    }
+
     pub fn parse_keywords(&mut self, keywords: Vec<&'static str>) -> bool {
         return self.parser.parse_keywords(keywords);
     }
