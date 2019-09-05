@@ -1,14 +1,20 @@
+#[macro_use]
 use sqlparser::dialect::*;
 use sqlparser::parser::*;
 use sqlparser::tokenizer::*;
-use crate::tree::create::{CreateTable, TableDefs, TableDef, ColumnTableDef, Nullable, DefaultExpr, Nullability, ForeignKeyConstraintTableDef, UniqueConstraintTableDef, ConstraintTableDef, IndexTableDef, IndexElem, IndexElemList};
-use crate::tree::table_name::TableName;
+use crate::tree::create::*;
+use crate::tree::table_name::{TableName, TableNamePrefix};
 use crate::types::{T, Types};
 use crate::types::internal::{InternalType, Family};
 use crate::types::oid::Oid;
 use std::borrow::Borrow;
-use crate::tree::name::Name;
-use sqlparser::parser::IsOptional::Mandatory;
+use crate::tree::name::{Name, NameList};
+use sqlparser::parser::IsOptional::{Mandatory, Optional};
+use serde::{Deserialize, Serialize};
+use serde_json::Result as JsonResult;
+use std::time::Instant;
+
+mod create_table;
 
 macro_rules! parser_err {
     ($MSG:expr) => {
@@ -16,7 +22,7 @@ macro_rules! parser_err {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Node {
     /// DDL for creating an external table in DataFusion
     CreateTable(CreateTable),
@@ -40,8 +46,11 @@ impl SqlParser {
 
     /// Parse a SQL statement and produce an Abstract Syntax Tree (AST)
     pub fn parse_sql(sql: String) -> Result<Node, ParserError> {
+        let start = Instant::now();
         let mut parser = SqlParser::new(sql)?;
-        parser.parse()
+        let result = parser.parse();
+        println!("parse_time: {:?}", start.elapsed());
+        return result;
     }
 
     /// Parse a new expression
@@ -84,114 +93,55 @@ impl SqlParser {
         }
     }
 
-    fn parse_create_table(&mut self) -> Result<Node, ParserError> {
-        let if_not_exists = self.parser.parse_keywords(vec!["IF", "NOT", "EXISTS"]);
-        let table_name = self.parser.parse_object_name().unwrap();
-        let table = TableName::new(table_name.to_string());
-        let columns = self.parse_create_table_columns(table.clone());
-        Ok(Node::CreateTable {
-            0: CreateTable {
-                if_not_exists,
-                table,
-                defs: columns.unwrap(),
-            }
-        })
-    }
-
-    fn parse_create_table_columns(&mut self, table_name: TableName) -> Result<TableDefs, ParserError> {
-        let mut columns = vec![];
-        if !self.parser.consume_token(&Token::LParen) || self.parser.consume_token(&Token::RParen) {
-            return Ok(columns);
-        }
-
-        loop {
-            if let Some(constraint) = self.parse_optional_table_constraint(table_name.clone())? {
-                columns.push(TableDef::ConstraintTableDef(constraint))
-            } else if let Some(Token::Word(column_name)) = self.parser.peek_token() {
-                self.parser.next_token();
-            } else {
-                return self.expected("column name or constraint definition", self.parser.peek_token());
-            }
-
-            let comma = self.parser.consume_token(&Token::Comma);
-            if self.parser.consume_token(&Token::RParen) {
-                // allow a trailing comma, even though it's not in standard
-                break;
-            } else if !comma {
-                return self.expected("',' or ')' after column definition", self.parser.peek_token());
-            }
-        }
-
-        columns.push(TableDef::ColumnTableDef {
-            0: ColumnTableDef {
-                name: "".to_string(),
-                typ: Types::Unknown.t(),
-                is_serial: false,
-                nullable: Nullable {
-                    nullability: Nullability::NotNull,
-                    constraint_name: "".to_string(),
-                },
-                primary_key: false,
-                unique: false,
-                unique_constraint_name: "".to_string(),
-                default_expr: None,
-            }
-        });
-
-        columns.push(TableDef::ConstraintTableDef {
-            0: ConstraintTableDef::ForeignKeyConstraintTableDef {
-                0: ForeignKeyConstraintTableDef {
-                    name: "".to_string(),
-                    table: table_name,
-                    from_cols: vec![],
-                    to_cols: vec![],
-                },
-            }
-        });
-
-        Ok(columns)
-    }
-
-    pub fn parse_optional_table_constraint(&mut self, table_name: TableName) -> Result<Option<ConstraintTableDef>, ParserError> {
-        let name = if self.parser.parse_keyword("CONSTRAINT") {
-            Some(self.parser.parse_identifier())
-        } else {
-            None
+    pub fn parse_table_name(&mut self) -> Result<TableName, ParserError> {
+        let mut table_name = TableName {
+            table_name: "".to_string(),
+            prefix: TableNamePrefix {
+                catalog_name: "".to_string(),
+                schema_name: "".to_string(),
+                explicit_catalog: false,
+                explicit_schema: false,
+            },
         };
-
-        match self.parser.next_token() {
-            Some(Token::Word(ref k)) if k.keyword == "PRIMARY".to_string() || k.keyword == "UNIQUE".to_string() => {
-                let is_primary = k.keyword == "PRIMARY".to_string();
-                if is_primary {
-                    self.parser.expect_keyword("KEY")?;
-                }
-                let columns = self.parser.parse_parenthesized_column_list(Mandatory);
-                Ok(Some(ConstraintTableDef::UniqueConstraintTableDef{
-                    0: UniqueConstraintTableDef {
-                        primary_key: is_primary,
-                        index: IndexTableDef {
-                            name: "".to_string(),
-                            columns: vec![],
-                            storing: vec![]
-                        }
-                    }
-                }))
+        let mut items = vec![];
+        loop {
+            match self.parser.next_token() {
+                Some(Token::Word(w)) => items.push(w.value),
+                unexpected => return self.expected("identifier", unexpected)
             }
-            unexpected => {
-                if name.is_some() {
-                    self.expected("PRIMARY, UNIQUE, FOREIGN, or CHECK", unexpected)
-                } else {
-                    self.parser.prev_token();
-                    Ok(None)
-                }
+            if !self.parser.consume_token(&Token::Period) {
+                break;
             }
         }
+        match items.len() {
+            1 => table_name.table_name = items[0].clone(),
+            2 => {
+                table_name.table_name = items[1].clone();
+                table_name.prefix.schema_name = items[0].clone();
+                table_name.prefix.explicit_schema = true;
+            }
+            3 => {
+                table_name.table_name = items[2].clone();
+                table_name.prefix.schema_name = items[1].clone();
+                table_name.prefix.explicit_schema = true;
+                table_name.prefix.catalog_name = items[0].clone();
+                table_name.prefix.explicit_catalog = true;
+            }
+            _ => return parser_err!("table name is not valid")
+        }
+        Ok(table_name)
     }
 
-    pub fn parse_parenthesized_column_list(&mut self) -> Result<IndexElemList, ParserError> {
-        return parser_err!("not implemented")
+    pub fn parse_parenthesized_column_list_sorted(&mut self) -> Result<IndexElemList, ParserError> {
+        return parser_err!("not implemented");
     }
 
+    pub fn parse_parenthesized_column_list(&mut self) -> Result<NameList, ParserError> {
+        match self.parser.parse_parenthesized_column_list(IsOptional::Mandatory) {
+            Ok(columns) => Ok(columns),
+            Err(err) => Err(err)
+        }
+    }
 
     /// Report unexpected token
     fn expected<T>(&self, expected: &str, found: Option<Token>) -> Result<T, ParserError> {
@@ -200,6 +150,10 @@ impl SqlParser {
             expected,
             found.map_or_else(|| "EOF".to_string(), |t| format!("{}", t))
         ))
+    }
+
+    pub fn parse_keywords(&mut self, keywords: Vec<&'static str>) -> bool {
+        return self.parser.parse_keywords(keywords);
     }
 
     pub fn parse_infix(
@@ -222,32 +176,9 @@ mod tests {
         let result = SqlParser::parse_sql(String::from(sql));
         assert!(!result.is_err());
         let stmt = result.unwrap();
-        match stmt {
-            Node::CreateTable(v) => {
-                for item in v.defs {
-                    match item {
-                        TableDef::ColumnTableDef(c) => {
-                            println!("found column {}", c.name)
-                        }
-                        TableDef::ConstraintTableDef(c) => {
-                            match c {
-                                ConstraintTableDef::ForeignKeyConstraintTableDef(x) => {
-                                    println!("found foreign key constraint")
-                                }
-                                ConstraintTableDef::UniqueConstraintTableDef(x) => {
-                                    println!("found unique constraint")
-                                }
-                                ConstraintTableDef::CheckConstraintTableDef(x) => {
-                                    println!("found check constraint")
-                                }
-                            }
-                        }
-                    }
-                }
-                println!("create table")
-            }
-            _ => {}
-        }
+        let j = serde_json::to_string(&stmt);
+        assert!(!j.is_err());
         println!("{}", sql.to_string());
+        println!("{}", j.unwrap());
     }
 }

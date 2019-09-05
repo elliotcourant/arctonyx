@@ -3,8 +3,10 @@ pub mod oid;
 
 use internal::*;
 use oid::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct T {
     pub internal: internal::InternalType,
 }

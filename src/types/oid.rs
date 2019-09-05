@@ -1,4 +1,6 @@
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Oid {
     Bool = 16,
     Bytea = 17,

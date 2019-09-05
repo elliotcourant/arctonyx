@@ -1,9 +1,11 @@
 use super::name::Name;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableName {
-    table_name: Name,
-    prefix: TableNamePrefix,
+    pub table_name: Name,
+    pub prefix: TableNamePrefix,
 }
 
 impl TableName {
@@ -20,10 +22,10 @@ impl TableName {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableNamePrefix {
-    catalog_name: Name,
-    schema_name: Name,
-    explicit_catalog: bool,
-    explicit_schema: bool,
+    pub catalog_name: Name,
+    pub schema_name: Name,
+    pub explicit_catalog: bool,
+    pub explicit_schema: bool,
 }

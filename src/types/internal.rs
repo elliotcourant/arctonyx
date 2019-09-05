@@ -1,7 +1,9 @@
 use super::T;
 use super::oid::Oid;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Family {
     Bool,
     Int,
@@ -25,7 +27,7 @@ pub enum Family {
     Any,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InternalType {
     pub family: Family,
     pub width: i32,

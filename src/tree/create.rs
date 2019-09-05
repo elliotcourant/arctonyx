@@ -4,14 +4,15 @@ use super::table_name::TableName;
 use super::expr::Expr;
 use crate::types::*;
 use crate::tree::{Stmt, Statement};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateDatabase {
     pub if_not_exists: bool,
     pub name: Name,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexElem {
     pub column: Name,
     pub direction: Direction,
@@ -19,7 +20,7 @@ pub struct IndexElem {
 
 pub type IndexElemList = Vec<IndexElem>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateIndex {
     pub name: Name,
     pub table: TableName,
@@ -30,26 +31,26 @@ pub struct CreateIndex {
     pub storing: NameList,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Nullability {
     NotNull,
     Null,
     SilentNull,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Nullable {
     pub nullability: Nullability,
     pub constraint_name: Name,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DefaultExpr {
     pub expr: Expr,
     pub constraint_name: Name,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TableDef {
     ColumnTableDef(ColumnTableDef),
     ConstraintTableDef(ConstraintTableDef),
@@ -57,14 +58,14 @@ pub enum TableDef {
 
 pub type TableDefs = Vec<TableDef>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConstraintTableDef {
     UniqueConstraintTableDef(UniqueConstraintTableDef),
     ForeignKeyConstraintTableDef(ForeignKeyConstraintTableDef),
     CheckConstraintTableDef(CheckConstraintTableDef),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnTableDef {
     pub name: Name,
     pub typ: T,
@@ -76,13 +77,13 @@ pub struct ColumnTableDef {
     pub default_expr: Option<DefaultExpr>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UniqueConstraintTableDef {
     pub primary_key: bool,
     pub index: IndexTableDef,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForeignKeyConstraintTableDef {
     pub name: Name,
     pub table: TableName,
@@ -90,21 +91,19 @@ pub struct ForeignKeyConstraintTableDef {
     pub to_cols: NameList,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckConstraintTableDef {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexTableDef {
     pub name: Name,
     pub columns: IndexElemList,
     pub storing: NameList,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTable {
     pub if_not_exists: bool,
     pub table: TableName,
     pub defs: TableDefs,
 }
-
-impl Statement for CreateTable {}

@@ -7,8 +7,22 @@ mod types;
 mod parser;
 mod cmd;
 
+use serde::{Deserialize, Serialize};
+use serde_json::Result;
+use std::time::Instant;
+
 fn main() {
     let args = cmd::Args::new(env::args().collect());
+    let stmt = parser::SqlParser::parse_sql("CREATE TABLE accounts (account_id BIGINT NOT NULL PRIMARY KEY, name TEXT);".to_string());
+    if stmt.is_err() {
+        panic!(stmt.err())
+    }
+    let s = stmt.unwrap();
+    let j = serde_json::to_string(&s);
+    if j.is_err() {
+        panic!(j.err())
+    }
+    println!("{}", j.unwrap());
 
     let startup: proto::startup_message::StartupMessage;
     let create: tree::create::CreateDatabase;
